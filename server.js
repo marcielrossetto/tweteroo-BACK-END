@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import app from "./src/app.js";
+import Tweet from './models/Tweet.js';
+
 
 dotenv.config();
 const PORT = process.env.PORT || 5000;

@@ -16,4 +16,5 @@ const tweetSchema = new mongoose.Schema({
   timestamps: true, // Adiciona automaticamente createdAt e updatedAt
 });
 
+
 export default mongoose.model('Tweet', tweetSchema);
