@@ -1,11 +1,13 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import connectDB from './db.js';  // Certifique-se de que o caminho está correto
+import mongoose from 'mongoose';
+import connectDB from './db.js';
 import User from './models/User.js';
-import Tweet from './models/Tweet.js';
+import Tweet from './models/Tweet.js'; 
 
 dotenv.config();
+
 
 const app = express();
 
@@ -74,7 +76,7 @@ app.get('/tweets',async(req, res)=>{
   try {
     const tweets = await Tweet.find().sort({ createdAt: -1 });
 
-    const tweetsWithAvatar = await Promisse.all(
+    const tweetsWithAvatar = await Promise.all(
       tweets.map(async (tweet) => {
         const user = await User.findOne({ name: tweet.username});
         return { 
