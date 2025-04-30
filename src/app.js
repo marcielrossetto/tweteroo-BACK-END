@@ -4,7 +4,10 @@ import cors from 'cors';
 import mongoose from 'mongoose';
 import connectDB from './db.js';
 import User from './models/User.js';
-import Tweet from './models/Tweet.js'; 
+import Tweet from './models/Tweet.js';
+import Joi from 'joi';
+import { userSchema } from './validators/userSchema.js';
+import { tweetSchema } from './validators/tweetSchema.js';
 
 dotenv.config();
 
@@ -13,19 +16,52 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-connectDB(); // Conecta ao MongoDB
+connectDB();
 
+// Esquema para validar ObjectId
+const idSchema = Joi.object({
+  id: Joi.string().hex().length(24).required().messages({
+    'string.hex': 'O ID deve ser um valor hexadecimal válido.',
+    'string.length': 'O ID deve ter 24 caracteres.',
+    'any.required': 'O ID é obrigatório.'
+  })
+});
+
+// Middleware de validação Joi
+const validateSchema = (schema) => {
+  return (req, res, next) => {
+    const { error } = schema.validate(req.body, { abortEarly: false });
+    if (error) {
+      return res.status(422).json({
+        message: 'Dados inválidos',
+        errors: error.details.map((detail) => detail.message)
+      });
+    }
+    next();
+  };
+};
+
+const validateParams = (schema) => {
+  return (req, res, next) => {
+    const { error } = schema.validate(req.params, { abortEarly: false });
+    if (error) {
+      return res.status(422).json({
+        message: 'Parâmetros inválidos',
+        errors: error.details.map((detail) => detail.message)
+      });
+    }
+    next();
+  };
+};
+
+// GET /
 app.get('/', (req, res) => {
   res.send('Tweteroo API rodando!');
 });
 
 // POST /sign-up
-app.post('/sign-up', async (req, res) => {
+app.post('/sign-up', validateSchema(userSchema), async (req, res) => {
   const { username, avatar } = req.body;
-
-  if (!username || !avatar) {
-    return res.status(400).json({ message: 'username e avatar são obrigatórios.' });
-  }
 
   try {
     const existingUser = await User.findOne({ username });
@@ -33,7 +69,7 @@ app.post('/sign-up', async (req, res) => {
       return res.status(400).json({ message: 'Este username já está em uso.' });
     }
 
-    const newUser = new User({ username, avatar });
+    const newUser = new User({ username, avatar: avatar || '' });
     await newUser.save();
 
     res.status(201).json({ message: 'Usuário criado com sucesso!' });
@@ -44,16 +80,10 @@ app.post('/sign-up', async (req, res) => {
 });
 
 // POST /tweets
-app.post('/tweets', async (req, res) => {
+app.post('/tweets', validateSchema(tweetSchema), async (req, res) => {
   const { username, tweet } = req.body;
 
-  // Validação
-  if (typeof username !== 'string' || typeof tweet !== 'string') {
-    return res.status(422).json({ message: 'username e tweet são obrigatórios e devem ser strings.' });
-  }
-
-  // Verifica se o usuário existe
-  const user = await User.findOne({ username }); // Corrigido de 'name' para 'username'
+  const user = await User.findOne({ username });
   if (!user) {
     return res.status(401).json({ message: 'Usuário não autorizado. Faça o cadastro primeiro.' });
   }
@@ -78,7 +108,7 @@ app.get('/tweets/:username', async (req, res) => {
     const tweetsWithAvatar = await Promise.all(
       tweets.map(async (tweet) => {
         const user = await User.findOne({ username: tweet.username });
-        return { 
+        return {
           _id: tweet._id,
           username: tweet.username,
           avatar: user?.avatar || '',
@@ -101,8 +131,8 @@ app.get('/tweets', async (req, res) => {
 
     const tweetsWithAvatar = await Promise.all(
       tweets.map(async (tweet) => {
-        const user = await User.findOne({ username: tweet.username }); // Corrigido de 'name' para 'username'
-        return { 
+        const user = await User.findOne({ username: tweet.username });
+        return {
           _id: tweet._id,
           username: tweet.username,
           avatar: user?.avatar || '',
@@ -118,17 +148,9 @@ app.get('/tweets', async (req, res) => {
 });
 
 // PUT /tweets/:id
-app.put('/tweets/:id', async (req, res) => {
+app.put('/tweets/:id', validateParams(idSchema), validateSchema(tweetSchema), async (req, res) => {
   const { id } = req.params;
   const { username, tweet } = req.body;
-
-  if (!username || !tweet || typeof username !== 'string' || typeof tweet !== 'string') {
-    return res.status(422).json({ message: 'Campos inválidos' });
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(404).json({ message: 'Tweet não encontrado' });
-  }
 
   try {
     const tweetFound = await Tweet.findById(id);
@@ -150,12 +172,8 @@ app.put('/tweets/:id', async (req, res) => {
 });
 
 // DELETE /tweets/:id
-app.delete('/tweets/:id', async (req, res) => {
+app.delete('/tweets/:id', validateParams(idSchema), async (req, res) => {
   const { id } = req.params;
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(404).json({ message: 'Tweet não encontrado' });
-  }
 
   try {
     const tweet = await Tweet.findById(id);
