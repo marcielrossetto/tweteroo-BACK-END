@@ -8,41 +8,39 @@ import Tweet from './models/Tweet.js';
 
 dotenv.config();
 
-
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-connectDB();  // Conecta ao MongoDB
+connectDB(); // Conecta ao MongoDB
 
 app.get('/', (req, res) => {
   res.send('Tweteroo API rodando!');
 });
 
-// Rota de sign-up
+// POST /sign-up
 app.post('/sign-up', async (req, res) => {
-    const { name, email, avatar } = req.body;  
+  const { username, avatar } = req.body;
 
-    const existingUser = await User.findOne({ email });
+  if (!username || !avatar) {
+    return res.status(400).json({ message: 'username e avatar são obrigatórios.' });
+  }
 
+  try {
+    const existingUser = await User.findOne({ username });
     if (existingUser) {
-      return res.status(400).json({ message: 'Este email já está em uso.' });
+      return res.status(400).json({ message: 'Este username já está em uso.' });
     }
 
-    try {
-      const newUser = new User({
-        name, 
-        email,
-        avatar,  
-      });
+    const newUser = new User({ username, avatar });
+    await newUser.save();
 
-      await newUser.save();
-      res.status(201).json({ message: 'Cadastro realizado com sucesso!' });
-    } catch (error) {
-      console.error('Erro no servidor:', error);
-      res.status(500).json({ message: 'Erro ao cadastrar usuário.' });
-    }
+    res.status(201).json({ message: 'Usuário criado com sucesso!' });
+  } catch (error) {
+    console.error('Erro no servidor:', error);
+    res.status(500).json({ message: 'Erro ao cadastrar usuário.' });
+  }
 });
 
 // POST /tweets
@@ -55,7 +53,7 @@ app.post('/tweets', async (req, res) => {
   }
 
   // Verifica se o usuário existe
-  const user = await User.findOne({ name: username });
+  const user = await User.findOne({ username }); // Corrigido de 'name' para 'username'
   if (!user) {
     return res.status(401).json({ message: 'Usuário não autorizado. Faça o cadastro primeiro.' });
   }
@@ -65,20 +63,45 @@ app.post('/tweets', async (req, res) => {
     await newTweet.save();
     res.status(201).json({ message: 'Tweet criado com sucesso!' });
   } catch (error) {
-    console.error(error);
+    console.error('Erro ao criar tweet:', error);
     res.status(500).json({ message: 'Erro ao criar tweet.' });
   }
 });
 
-//Rota obter twets
+// GET /tweets/:username
+app.get('/tweets/:username', async (req, res) => {
+  const { username } = req.params;
 
-app.get('/tweets',async(req, res)=>{
+  try {
+    const tweets = await Tweet.find({ username }).sort({ createdAt: -1 });
+
+    const tweetsWithAvatar = await Promise.all(
+      tweets.map(async (tweet) => {
+        const user = await User.findOne({ username: tweet.username });
+        return { 
+          _id: tweet._id,
+          username: tweet.username,
+          avatar: user?.avatar || '',
+          tweet: tweet.tweet
+        };
+      })
+    );
+
+    res.status(200).json(tweetsWithAvatar);
+  } catch (error) {
+    console.error('Erro ao buscar tweets do usuário:', error);
+    res.status(500).json({ message: 'Erro ao buscar tweets.' });
+  }
+});
+
+// GET /tweets
+app.get('/tweets', async (req, res) => {
   try {
     const tweets = await Tweet.find().sort({ createdAt: -1 });
 
     const tweetsWithAvatar = await Promise.all(
       tweets.map(async (tweet) => {
-        const user = await User.findOne({ name: tweet.username});
+        const user = await User.findOne({ username: tweet.username }); // Corrigido de 'name' para 'username'
         return { 
           _id: tweet._id,
           username: tweet.username,
@@ -88,23 +111,21 @@ app.get('/tweets',async(req, res)=>{
       })
     );
     res.status(200).json(tweetsWithAvatar);
-  }catch (error) {
-    console.error('Erro9 ao buscar tweets:', error);
-    res.status(500).json({ message: 'Erro ao buscar tweets.'});
+  } catch (error) {
+    console.error('Erro ao buscar tweets:', error);
+    res.status(500).json({ message: 'Erro ao buscar tweets.' });
   }
 });
 
-//Editar tweets
+// PUT /tweets/:id
 app.put('/tweets/:id', async (req, res) => {
   const { id } = req.params;
   const { username, tweet } = req.body;
 
-  // Validação básica
   if (!username || !tweet || typeof username !== 'string' || typeof tweet !== 'string') {
     return res.status(422).json({ message: 'Campos inválidos' });
   }
 
-  // Verifica se o ID é válido do MongoDB
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(404).json({ message: 'Tweet não encontrado' });
   }
@@ -116,24 +137,22 @@ app.put('/tweets/:id', async (req, res) => {
       return res.status(404).json({ message: 'Tweet não encontrado' });
     }
 
-    // Atualiza o tweet
     await Tweet.updateOne(
       { _id: id },
       { $set: { username, tweet } }
     );
 
-    res.sendStatus(204); // Sucesso sem conteúdo
+    res.sendStatus(204);
   } catch (error) {
     console.error('Erro ao editar tweet:', error);
     res.status(500).json({ message: 'Erro ao editar tweet' });
   }
 });
 
-//deletando tweet
+// DELETE /tweets/:id
 app.delete('/tweets/:id', async (req, res) => {
   const { id } = req.params;
 
-  // Verifica se o ID é válido
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(404).json({ message: 'Tweet não encontrado' });
   }
@@ -147,23 +166,22 @@ app.delete('/tweets/:id', async (req, res) => {
 
     await Tweet.deleteOne({ _id: id });
 
-    res.sendStatus(204); // No Content
+    res.sendStatus(204);
   } catch (error) {
     console.error('Erro ao deletar tweet:', error);
     res.status(500).json({ message: 'Erro ao deletar tweet' });
   }
 });
 
-
-// Rota para buscar usuários
+// GET /users
 app.get('/users', async (req, res) => {
-    try {
-      const users = await User.find(); // Busca todos os usuários
-      res.status(200).json(users);
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'Erro ao buscar usuários.' });
-    }
+  try {
+    const users = await User.find();
+    res.status(200).json(users);
+  } catch (error) {
+    console.error('Erro ao buscar usuários:', error);
+    res.status(500).json({ message: 'Erro ao buscar usuários.' });
+  }
 });
 
 const PORT = process.env.PORT || 5000;

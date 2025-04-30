@@ -3,7 +3,7 @@
 tmp/
 temp/
 .tmp/
-
+.env
 # Node.js specific
 node_modules/
 package-lock.json

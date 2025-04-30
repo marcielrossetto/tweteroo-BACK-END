@@ -1,17 +1,20 @@
 import User from '../models/User.js';
 
 export async function signUp(req, res) {
-  const { name, email } = req.body;
+  const { username, avatar } = req.body;
 
-  if (!name || !email) {
-    return res.status(400).send("Nome e e-mail são obrigatórios.");
+  if (!username || !avatar) {
+    return res.status(400).send("Username e avatar são obrigatórios.");
   }
 
   try {
-    // Cria um novo usuário
-    const newUser = new User({ name, email });
-    
-    // Salva o usuário no banco
+    const existingUser = await User.findOne({ username });
+
+    if (existingUser) {
+      return res.status(409).send("Username já cadastrado.");
+    }
+
+    const newUser = new User({ username, avatar });
     await newUser.save();
 
     res.status(201).send("Usuário cadastrado com sucesso!");
